@@ -9,6 +9,8 @@ this is a free app and may not be used in any commercial way without written per
 
 To install click the green code icon and press dowload zip, open the zip file and find the apps folder, now drop that into your assetto corsa root folder and you are done.
 
+when ingame its a good idea to enable "show worning" option untill you have set the size of the warning and placed it in a good position on the screen.
+
 Known problems: 
 
 warning may flicker sometimes
