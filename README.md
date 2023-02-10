@@ -1,5 +1,7 @@
 # pileupwarning
 
+![screenshot](https://github.com/Halvhjearne/pileupwarning/blob/master/apps/lua/pileupwarning/pileup.png?raw=true)
+
 An app for assetto corsa to show a warning when traffic is slowing down in front of you by Halvhjearne
 
 http://www.twitch.tv/halvhjearne
