@@ -16,11 +16,33 @@ local pileupsettings = ac.storage{
     mindist = 0,
     signsize = 100,
     maxdist = 1250,
+    playermaxdist = 150,
     angle = 90,
     mincars = 2,
+    playernearby = false,
+    includeself = false,
     alwaysshowwarning = false,
     debug = false
 }
+
+local function checkIsPlayerNearby(pos)
+    local isnearby = false
+    local num = 1
+    if pileupsettings.includeself then
+        num = 0
+    end
+    for i = num, sim.carsCount - 1 do
+        local car = ac.getCar(i)
+        if car.isConnected and (not car.isHidingLabels) then
+            local distancefromme = car.position:distance(pos)
+            if distancefromme <= pileupsettings.playermaxdist then
+                isnearby =  true
+            end
+        end
+        if isnearby then break end
+    end
+    return isnearby
+end
 
 local function isinfront(spos, sdir, tpos)
 --    local dirtot = math.atan((target.position.y - source.position.y), (target.position.x - source.position.x))*(180 / math.pi)
@@ -48,6 +70,7 @@ function script.pileupwarning(dt)
     end
     for i = 1, sim.carsCount - 1 do
         local car = ac.getCar(i)
+        -- isRemote ?
         if (car.isHidingLabels or car.isAIControlled) and car.isConnected then
             local distancefromme = car.position:distance(mycar.position)
             local infront, dirtot, returnval = isinfront(mycar.position,mycar.compass,car.position)
@@ -56,9 +79,17 @@ function script.pileupwarning(dt)
             end
             if infront and car.speedKmh <= pileupsettings.minspeed and distancefromme >= pileupsettings.mindist and distancefromme <= pileupsettings.maxdist then
                 if pileupsettings.debug then ui.sameLine(0,5) ui.text(' - (triggered)') end
+
                 num = num+1
-                if num >= pileupsettings.mincars then
+                local check = num
+                if pileupsettings.playernearby then
+                    if checkIsPlayerNearby(car.position) then
+                        check = check + 1
+                    end
+                end
+                if check >= pileupsettings.mincars then
                     showwarning = true
+                    break
                 end
             end
         end
@@ -78,8 +109,20 @@ function script.pileupwarningMain(dt)
     if ui.itemHovered() then ui.setTooltip('Distance above this can not trigger the warning') end
     pileupsettings.angle = ui.slider('Angle', pileupsettings.angle, 0, 180, '%.1f')
     if ui.itemHovered() then ui.setTooltip('Angles around the cars gps direction (both sides), where ai can trigger the warning') end
-    pileupsettings.mincars = ui.slider('Min cars', pileupsettings.mincars, 1, 10, '%.0f')
+    pileupsettings.mincars = ui.slider('Min cars', pileupsettings.mincars, 1, 100, '%.0f')
     if ui.itemHovered() then ui.setTooltip('Minimum amount of cars to be triggered, before the warning will be triggered') end
+    if ui.checkbox('Check for player', pileupsettings.playernearby) then
+        pileupsettings.playernearby = not pileupsettings.playernearby
+    end
+    if ui.itemHovered() then ui.setTooltip('Will reduce min cars by one if a player is nearby') end
+    if pileupsettings.playernearby then
+        ui.sameLine(0,5)
+        if ui.checkbox('Include yourself', pileupsettings.includeself) then
+            pileupsettings.includeself = not pileupsettings.includeself
+        end
+        pileupsettings.playermaxdist = ui.slider('Max distance', pileupsettings.playermaxdist, 0, 1000, '%.0fm')
+        if ui.itemHovered() then ui.setTooltip('Maximum distance to a nearby player to reduce') end
+    end
     ui.separator()
     pileupsettings.signsize = ui.slider('Warning size', pileupsettings.signsize, 25, 500, '%.0fx'..pileupsettings.signsize)
     if ui.itemHovered() then ui.setTooltip('Size of the warning sign') end
