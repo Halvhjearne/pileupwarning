@@ -37,9 +37,9 @@ local function checkIsPlayerNearby(pos)
             local distancefromme = car.position:distance(pos)
             if distancefromme <= pileupsettings.playermaxdist then
                 isnearby =  true
+                break
             end
         end
-        if isnearby then break end
     end
     return isnearby
 end
@@ -120,7 +120,7 @@ function script.pileupwarningMain(dt)
         if ui.checkbox('Include yourself', pileupsettings.includeself) then
             pileupsettings.includeself = not pileupsettings.includeself
         end
-        pileupsettings.playermaxdist = ui.slider('Max distance', pileupsettings.playermaxdist, 0, 1000, '%.0fm')
+        pileupsettings.playermaxdist = ui.slider('Player distance', pileupsettings.playermaxdist, 0, 1000, '%.0fm')
         if ui.itemHovered() then ui.setTooltip('Maximum distance to a nearby player to reduce') end
     end
     ui.separator()
