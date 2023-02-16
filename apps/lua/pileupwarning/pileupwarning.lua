@@ -11,12 +11,12 @@
 local playercar = ac.getCar(0)
 local sim = ac.getSim()
 
-local pileupsettings = ac.storage{
+local pileupsettings = {
     minspeed = 40,
     mindist = 0,
     signsize = 100,
-    maxdist = 1250,
-    playermaxdist = 50,
+    maxdist = 1500,
+    playermaxdist = 75,
     angle = 90,
     mincars = 2,
     playernearby = false,
@@ -24,6 +24,21 @@ local pileupsettings = ac.storage{
     alwaysshowwarning = false,
     debug = false
 }
+
+local dir = ac.getFolder(ac.FolderID.ExtCfgUser)..'/pileupwarning'
+local filename = dir..'/'..ac.getTrackID()..'.cfg'
+
+local loadfile = ''
+if io.fileExists(filename) then
+    loadfile = filename
+end
+
+if loadfile ~= '' then
+    local data = ac.INIConfig.load(loadfile)
+    for k,v in pairs(pileupsettings) do
+        pileupsettings[k] = data:get('DEFAULTS', k, v)
+    end
+end
 
 local function checkIsPlayerNearby(pos)
     local isnearby = false
@@ -44,7 +59,7 @@ local function checkIsPlayerNearby(pos)
     return isnearby
 end
 
-local function isinfront(spos, sdir, tpos)
+local function checkdir(spos, sdir, tpos)
 --    local dirtot = math.atan((target.position.y - source.position.y), (target.position.x - source.position.x))*(180 / math.pi)
     local dirtot = ac.getCompassAngle(vec3(tpos.x - spos.x,tpos.y - spos.y,tpos.z - spos.z))
     local returnval = dirtot-sdir
@@ -73,7 +88,7 @@ function script.pileupwarning(dt)
         -- isRemote ?
         if (car.isHidingLabels or car.isAIControlled) and car.isConnected then
             local distancefromme = car.position:distance(mycar.position)
-            local infront, dirtot, returnval = isinfront(mycar.position,mycar.compass,car.position)
+            local infront, dirtot, returnval = checkdir(mycar.position,mycar.compass,car.position)
             if pileupsettings.debug then
                 ui.bulletText('car: '..i..' - Km/h: '..math.floor(car.speedKmh)..' - Dir to car: '..math.floor(dirtot)..' - returnval: '..math.floor(returnval)..' - infront: '..tostring(infront)..' - Distance: '..math.floor(distancefromme))
             end
@@ -107,7 +122,7 @@ function script.pileupwarningMain(dt)
     if ui.itemHovered() then ui.setTooltip('Distance below this can not trigger the warning') end
     pileupsettings.maxdist = ui.slider('Max distance', pileupsettings.maxdist, pileupsettings.mindist+1, 10000, '%.0fm')
     if ui.itemHovered() then ui.setTooltip('Distance above this can not trigger the warning') end
-    pileupsettings.angle = ui.slider('Angle', pileupsettings.angle, 0, 180, '%.1f')
+    pileupsettings.angle = ui.slider('Angle', pileupsettings.angle, 0, 180, '%.0f')
     if ui.itemHovered() then ui.setTooltip('Angles around the cars gps direction (both sides), where ai can trigger the warning') end
     pileupsettings.mincars = ui.slider('Min cars', pileupsettings.mincars, 1, 100, '%.0f')
     if ui.itemHovered() then ui.setTooltip('Minimum amount of cars to be triggered, before the warning will be triggered') end
@@ -152,7 +167,23 @@ function script.pileupwarningMain(dt)
             ui.bulletText(key..value)
         end
     end
-
+    if ui.button('Save track settings') then
+        local data = ac.INIConfig.load(filename)
+        if io.fileExists(filename) then
+            io.deleteFile(filename)
+            data = ac.INIConfig.load(filename)
+        else
+            if not io.dirExists(dir) then
+                io.createDir(dir)
+            end
+        end
+        for k,v in pairs(pileupsettings) do
+            if k ~= 'debug' then
+                data:setAndSave('DEFAULTS', k, v)
+            end
+        end
+    end
+    ui.separator()
     ui.labelText('','* pileupwarning by Halvhjearne!')
 end
 
