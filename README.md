@@ -15,4 +15,4 @@ once it is installed and you are ingame, it is adviced to enable the "show warni
 
 Known problems: 
 
-warning may flicker sometimes
+warning may flicker sometimes (false positives) but this can be reduced by changing settings.

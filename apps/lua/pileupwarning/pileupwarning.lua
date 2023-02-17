@@ -16,21 +16,41 @@ local pileupsettings = {
     mindist = 0,
     signsize = 100,
     maxdist = 1500,
+    playermaxcount = 2,
     playermaxdist = 75,
     angle = 90,
     mincars = 2,
-    playernearby = false,
-    includeself = false,
+    playernearby = true,
     alwaysshowwarning = false,
     debug = false
 }
 
+local savetxt = ''
 local dir = ac.getFolder(ac.FolderID.ExtCfgUser)..'/pileupwarning'
+local mapini = ac.getFolder(ac.FolderID.ContentTracks) .. '/' .. ac.getTrackFullID('/') .. '/data/map.ini'
+local scale = 1
+if io.fileExists(mapini) then
+    local data = ac.INIConfig.load(mapini)
+    scale = data:get('PARAMETERS','SCALE_FACTOR',1)
+end
+
+local defaultsfilename = dir..'/defaults.cfg'
 local filename = dir..'/'..ac.getTrackID()..'.cfg'
+if ac.getTrackLayout() ~= '' then
+    dir = ac.getFolder(ac.FolderID.ExtCfgUser)..'/pileupwarning/'..ac.getTrackLayout()
+    filename = dir..'/'..ac.getTrackID()..'.cfg'
+end
+
+if io.fileExists(mapini) then
+    local data = ac.INIConfig.load(mapini)
+    scale = data:get('PARAMETERS','SCALE_FACTOR',1)
+end
 
 local loadfile = ''
 if io.fileExists(filename) then
     loadfile = filename
+elseif io.fileExists(defaultsfilename) then
+    loadfile = defaultsfilename
 end
 
 if loadfile ~= '' then
@@ -41,18 +61,13 @@ if loadfile ~= '' then
 end
 
 local function checkIsPlayerNearby(pos)
-    local isnearby = false
-    local num = 1
-    if pileupsettings.includeself then
-        num = 0
-    end
-    for i = num, sim.carsCount - 1 do
+    local isnearby = 0
+    for i = 1, sim.carsCount - 1 do
         local car = ac.getCar(i)
         if car.isConnected and (not car.isHidingLabels) then
-            local distancefromme = car.position:distance(pos)
+            local distancefromme = (car.position:distance(pos))*scale
             if distancefromme <= pileupsettings.playermaxdist then
-                isnearby =  true
-                break
+                isnearby =  isnearby + 1
             end
         end
     end
@@ -75,7 +90,29 @@ local function checkdir(spos, sdir, tpos)
     return isfront, dirtot, returnval
 end
 
-function script.pileupwarning(dt)
+local function fncsetnsave(savefile)
+    local data = ac.INIConfig.load(savefile)
+    if io.fileExists(savefile) then
+        io.deleteFile(savefile)
+        data = ac.INIConfig.load(savefile)
+    else
+        if not io.dirExists(dir) then
+            io.createDir(dir)
+        end
+    end
+    for k,v in pairs(pileupsettings) do
+        if k ~= 'debug' then
+            data:setAndSave('DEFAULTS', k, v)
+        end
+    end
+    local txt = 'Default Settings saved'
+    if defaultsfilename ~= savefile then
+        txt = 'Settings saved for '..ac.getTrackName()
+    end
+    return txt
+end
+
+local function warningcheck()
     local showwarning = false
     if pileupsettings.alwaysshowwarning then showwarning = true end
     local num = 0
@@ -87,7 +124,7 @@ function script.pileupwarning(dt)
         local car = ac.getCar(i)
         -- isRemote ?
         if (car.isHidingLabels or car.isAIControlled) and car.isConnected then
-            local distancefromme = car.position:distance(mycar.position)
+            local distancefromme = car.position:distance(mycar.position)*scale
             local infront, dirtot, returnval = checkdir(mycar.position,mycar.compass,car.position)
             if pileupsettings.debug then
                 ui.bulletText('car: '..i..' - Km/h: '..math.floor(car.speedKmh)..' - Dir to car: '..math.floor(dirtot)..' - returnval: '..math.floor(returnval)..' - infront: '..tostring(infront)..' - Distance: '..math.floor(distancefromme))
@@ -95,26 +132,40 @@ function script.pileupwarning(dt)
             if infront and car.speedKmh <= pileupsettings.minspeed and distancefromme >= pileupsettings.mindist and distancefromme <= pileupsettings.maxdist then
                 if pileupsettings.debug then ui.sameLine(0,5) ui.text(' - (triggered)') end
 
-                num = num+1
+                num = num + 1
                 local check = num
                 if pileupsettings.playernearby then
-                    if checkIsPlayerNearby(car.position) then
-                        check = check + 1
+                    local extra = checkIsPlayerNearby(car.position)
+                    if extra > 0 then
+                        if extra > pileupsettings.playermaxcount then
+                            check = check + pileupsettings.playermaxcount
+                        else
+                            check = check + extra
+                        end
                     end
                 end
                 if check >= pileupsettings.mincars then
                     showwarning = true
-                    break
+                    if not pileupsettings.debug then
+                        break
+                    end
                 end
             end
         end
     end
-    if showwarning then
+    return showwarning
+end
+
+function script.pileupwarning(dt)
+    if warningcheck() then
         ui.image('pileup.png',vec2(pileupsettings.signsize,pileupsettings.signsize))
     end
 end
 
 function script.pileupwarningMain(dt)
+    ui.icon('pileup.png', vec2(15,15), rgbm(1, 1, 1, 1))
+    ui.sameLine(0, 5)
+    ui.header('Settings:')
     ui.separator()
     pileupsettings.minspeed = ui.slider('Min speed', pileupsettings.minspeed, 0, 200, '%.0fKmh')
     if ui.itemHovered() then ui.setTooltip('Speeds above this can not trigger the warning') end
@@ -124,19 +175,19 @@ function script.pileupwarningMain(dt)
     if ui.itemHovered() then ui.setTooltip('Distance above this can not trigger the warning') end
     pileupsettings.angle = ui.slider('Angle', pileupsettings.angle, 0, 180, '%.0f')
     if ui.itemHovered() then ui.setTooltip('Angles around the cars gps direction (both sides), where ai can trigger the warning') end
-    pileupsettings.mincars = ui.slider('Min cars', pileupsettings.mincars, 1, 100, '%.0f')
+    local min = 1
+    if pileupsettings.playernearby then min = 2 if pileupsettings.mincars < 2 then pileupsettings.mincars = 2 end end
+    pileupsettings.mincars = ui.slider('Min cars', pileupsettings.mincars, min, 100, '%.0f')
     if ui.itemHovered() then ui.setTooltip('Minimum amount of cars to be triggered, before the warning will be triggered') end
-    if ui.checkbox('Check for player', pileupsettings.playernearby) then
+    if ui.checkbox('Count nearby player(s)', pileupsettings.playernearby) then
         pileupsettings.playernearby = not pileupsettings.playernearby
     end
-    if ui.itemHovered() then ui.setTooltip('Will reduce min cars by one if a player is nearby') end
+    if ui.itemHovered() then ui.setTooltip('Will increase min cars by x amount of players nearby') end
     if pileupsettings.playernearby then
-        ui.sameLine(0,5)
-        if ui.checkbox('Include yourself', pileupsettings.includeself) then
-            pileupsettings.includeself = not pileupsettings.includeself
-        end
-        pileupsettings.playermaxdist = ui.slider('Player distance', pileupsettings.playermaxdist, 0, 1000, '%.0fm')
-        if ui.itemHovered() then ui.setTooltip('Maximum distance to a nearby player to reduce') end
+        pileupsettings.playermaxdist = ui.slider('Player distance', pileupsettings.playermaxdist, 0, pileupsettings.maxdist, '%.0fm')
+        if ui.itemHovered() then ui.setTooltip('Player(s) within this distance will also be countet in min cars') end
+        pileupsettings.playermaxcount = ui.slider('Max player(s)', pileupsettings.playermaxcount, 1, 100, '%.0f')
+        if ui.itemHovered() then ui.setTooltip('Maximum amount of players to add to min cars near a slowing ai') end
     end
     ui.separator()
     pileupsettings.signsize = ui.slider('Warning size', pileupsettings.signsize, 25, 500, '%.0fx'..pileupsettings.signsize)
@@ -161,6 +212,7 @@ function script.pileupwarningMain(dt)
             ['car pos: '] = tostring(mycar.position),
             ['car speed: '] = math.floor(mycar.speedKmh),
             ['cam pos: '] = tostring(ac.getCameraPosition()),
+            ['map scale: '] = tostring(scale),
             ['cam compass: '] = math.floor(ac.getCompassAngle(ac.getCameraForward()))
         }
         for key, value in pairs(t) do
@@ -168,23 +220,14 @@ function script.pileupwarningMain(dt)
         end
     end
     if ui.button('Save track settings') then
-        local data = ac.INIConfig.load(filename)
-        if io.fileExists(filename) then
-            io.deleteFile(filename)
-            data = ac.INIConfig.load(filename)
-        else
-            if not io.dirExists(dir) then
-                io.createDir(dir)
-            end
-        end
-        for k,v in pairs(pileupsettings) do
-            if k ~= 'debug' then
-                data:setAndSave('DEFAULTS', k, v)
-            end
-        end
+        savetxt = fncsetnsave(filename)
+    end
+    if ui.button('Save default settings') then
+        savetxt = fncsetnsave(defaultsfilename)
     end
     ui.separator()
-    ui.labelText('','* pileupwarning by Halvhjearne!')
+    ui.labelText(savetxt,'* pileupwarning by Halvhjearne!')
+    if ui.itemHovered() then savetxt = '' end
 end
 
 --function script.update(dt)
